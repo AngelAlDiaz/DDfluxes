@@ -60,7 +60,7 @@ def calcDDFlux_Gr(ek_, el_, Dphikl_, ck_, returnJacobian=False, thresholdLinExps
 
     if returnJacobian:
         dcdeta_k, cl = kwargs['dcdeta_k'], kwargs['cl'];
-
+        # Derivatives w.r.t. quasi-Fermi potential phik and phil
         djdphil, djdphik = np.zeros_like(Dphikl_), np.zeros_like(Dphikl_);
         
         DphiDe = np.zeros_like(Dphikl_);
@@ -74,9 +74,20 @@ def calcDDFlux_Gr(ek_, el_, Dphikl_, ck_, returnJacobian=False, thresholdLinExps
             
         djdphil[maskRegularize == 0] = (-1)*commonTerm[maskRegularize == 0] - cl[maskRegularize == 0]*DphiDe[maskRegularize == 0];
         djdphil[maskRegularize > 0] = commonTerm[maskRegularize > 0] + cl[maskRegularize > 0];
+
+        # Derivatives w.r.t. electrostatic potential Vk and Vl
+        z = kwargs['chargeNumber'];
+        djdVk, djdVl = np.zeros_like(Dphikl_), np.zeros_like(Dphikl_);
+
+        djdVk[maskRegularize == 0] = -z*( integral[maskRegularize == 0] - ck_[maskRegularize == 0]] )*DphiDe;
+        djdVk[maskRegularize > 0] = -commonTerm[maskRegularize > 0];
+
+        djdVl[maskRegularize == 0] = z*( integral[maskRegularize == 0] - cl_[maskRegularize == 0]] )*DphiDe;
+        djdVl[maskRegularize > 0] = djdVk[maskRegularize > 0];
         
-        return j.copy(), djdphik.copy(), djdphil.copy();
+        return j.copy(), djdphik.copy(), djdphil.copy(), djdVk.copy(), djdVl.copy();
     else:
         return j.copy();
     #end if
+
 #end def
