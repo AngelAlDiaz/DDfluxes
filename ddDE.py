@@ -6,7 +6,7 @@ Created on Thu Mar 6 13:29:22 2025
 """
 import numpy as np;
 
-def BernouilliGenFunction(x):
+def BernouilliGenFunction(x, returnDerivative=False):
     """
     Computes the Bernouilli's generating function appearing in the classical
     Scharfetter-Gummel method.
@@ -15,16 +15,21 @@ def BernouilliGenFunction(x):
     ----------
     x : numpy.array(float)
         Dimensionless argument of the function.
-
+    returnDerivative : bool, OPTIONAL
+        Whether to return the derivative.
     Returns
     -------
     numpy.array(float)
         Array with the values of the Bernoulli's function.
     """
     result = np.ones_like(x, float);
-    auxMask = (np.abs(x) > 1e-10);
-    result[auxMask > 0] = x[auxMask > 0]/(np.exp(x[auxMask > 0]) - 1.0);
-    return result;
+    safeIndices = np.nonzero(np.abs(x) > 1e-10)[0];
+    result[safeIndices] = x[safeIndices]/(np.exp(x[safeIndices]) - 1.0);
+    if returnDerivative:
+        deriv = -0.5*np.ones_like(x, float);
+        deriv[safeIndices] = result[safeIndices]*(1.0/x[safeIndices] - np.exp(x[safeIndices]));
+        return result, deriv;
+    else: return result;
 #end def
 
 def calcDDFlux_DE(ck_, cl_, zDVkl_, avgDE_, returnJacobian=False, thresholdLinExpsn=1e-5, **kwargs):
@@ -61,39 +66,47 @@ def calcDDFlux_DE(ck_, cl_, zDVkl_, avgDE_, returnJacobian=False, thresholdLinEx
     -------
         Numerical carrier flux along bond from k to l.
     """
-    zDVkl_ /= avgDE_;    
-    B_zDV, BzDV = BernouilliGenFunction(-zDVkl_), BernouilliGenFunction(zDVkl_);
+    zDVkl_ /= avgDE_;
+    if returnJacobian: B_zDV, dB_zDV, BzDV, dBzDV = BernouilliGenFunction(-zDVkl_, returnDerivative=True), BernouilliGenFunction(zDVkl_, returnDerivative=True);
+    else: B_zDV, BzDV = BernouilliGenFunction(-zDVkl_), BernouilliGenFunction(zDVkl_);
     j = -avgDE_*(B_zDV*cl_ - BzDV*ck_);
     
     if returnJacobian:
         dcdeta_k, dcdeta_l = kwargs['dcdeta_k'], kwargs['dcdeta_l'];
         dlnc = np.log(cl_/ck_);
         
-        DEk, DEl = ck_/dcdeta_k, cl_/dcdeta_l; # Diff. enhancement at nodes k and l
-        # Derivative of the averaged diff. enhancement w.r.t. eta
-        davgDEdeta_k, davgDEdeta_l = (-1.0+avgDE_/DEk)/dlnc, (1.0-avgDE_/DEl)/dlnc;
-        davgDEdeta_k[np.abs(dlnc) < thresholdLinExpsn] = 0.0;
-        davgDEdeta_l[np.abs(dlnc) < thresholdLinExpsn] = 0.0;
-        # Derivatives of Bernoulli functions w.r.t. their argument, i.e. B'(x) := dB(x)/dx
-        expp = np.exp(zDVkl_);
-        exp_ = 1.0/expp;
-        dBzDV, dB_zDV = -0.5*np.ones_like(zDVkl_), -0.5*np.ones_like(zDVkl_); # Limit of Derivative when x->0 is -0.5
-        maskRegularize = (np.abs(zDVkl_) < thresholdLinExpsn);
-        dBzDV[maskRegularize == 0] = (expp[maskRegularize == 0]-1-zDVkl_[maskRegularize == 0]*expp[maskRegularize == 0])/(expp[maskRegularize == 0]-1)**2;
-        dB_zDV[maskRegularize == 0] = (exp_[maskRegularize == 0]-1+zDVkl_[maskRegularize == 0]*exp_[maskRegularize == 0])/(exp_[maskRegularize == 0]-1)**2;
+        # Derivative of the averaged diff. enhancement w.r.t. eta (requires 2nd derivative of particle density, 'd2cdeta2')
+        DEk, DEl = ck_/dcdeta_k, cl_/dcdeta_l; # Diff. enhancment at nodes k and l
+        maskRegularize = (np.abs(dlnc) < thresholdLinExpsn);
+        davgDEdeta_k, davgDEdeta_l = np.zeros_like(avgDE_, float), np.zeros_like(avgDE_, float);
+        safeIndices = np.nonzero( maskRegularize == 0 )[0];
+        regularize = np.nonzero( maskRegularize )[0];
+        davgDEdeta_k[safeIndices] = (-1.0 + avgDE_[safeIndices]/DEk[safeIndices])/dlnc[safeIndices];
+        davgDEdeta_l[safeIndices] = (1.0 - avgDE_[safeIndices]/DEl[safeIndices])/dlnc[safeIndices];
+        davgDEdeta_k[regularize] = 0.5 * (1.0 - DEk[regularize]**2 * kwargs['d2cdeta2'][regularize] / ck_[regularize]);
+        davgDEdeta_l[regularize] = -davgDEdeta_k[regularize];
+
         # Quantities that are used twice (to prevent from computing them twice)
-        aux = (-1)*avgDE_*(cl*dB_zDV + ck_*dBzDV)*(zDVkl_/avgDE_);
-        jk = j/avgDE_;
-        
-        djdphik = jk*davgDEdeta_k + avgDE_*dcdeta_k*BzDV + aux*davgDEdeta_k;
+        aux = (-1)*(cl_*dB_zDV + ck_*dBzDV)*(zDVkl_/avgDE);
+        jDE = j/avgDE_;
+
+        # Derivatives w.r.t. quasi-Fermi potential phik and phil
+        djdphik = jDE*davgDEdeta_k + avgDE_*dcdeta_k*BzDV + aux*davgDEdeta_k;
         djdphik *= -1;
         
-        djdphil = jk*davgDEdeta_l - avgDE_*dcdeta_l*B_zDV + aux*davgDEdeta_l;
+        djdphil = jDE*davgDEdeta_l - avgDE_*dcdeta_l*B_zDV + aux*davgDEdeta_l;
         djdphil *= -1;
+
+        # Derivatives w.r.t. electrostatic potential Vk and Vl
+        z = kwargs['chargeNumber'];
+        common = (dB_zDV*cl_ + dBzDV*ck_);
+        djdVk = z*( djdphik - common );
+        djdVl = z*( djdphil + common );
         
-        return j.copy(), djdphik.copy(), djdphil.copy();
+        return j.copy(), djdphik.copy(), djdphil.copy(), djdVk.copy(), djdVl.copy();
     else:
         return j.copy();
     #end if
 #end def
+
 
