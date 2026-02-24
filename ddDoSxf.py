@@ -155,28 +155,38 @@ def calcDDFlux_DoSxf(ek_, el_, Dphikl_, E, DoS, statistics=1., returnJacobian=Fa
     # (Deta)^{-1} * Integral[deta c(eta)]
     integral = calcIntegralDoSKernel(E, DoS, ekl_, Dekl_, thresholdLinExpsn, statistics);
     j = integral*Dphikl_;
-            
+
     if returnJacobian:
-        dcdeta_k, ck, cl = kwargs['dcdeta_k'], kwargs['ck'], kwargs['cl'];
-
+        dcdeta_k, cl = kwargs['dcdeta_k'], kwargs['cl'];
+        # Derivatives w.r.t. quasi-Fermi potential phik and phil
         djdphil, djdphik = np.zeros_like(Dphikl_), np.zeros_like(Dphikl_);
-        maskRegularize = (np.abs(Dekl_) < thresholdLinExpsn); # 1s where denominator Deta is close to 0 
-
+        
         DphiDe = np.zeros_like(Dphikl_);
         DphiDe[maskRegularize == 0] = Dphikl_[maskRegularize == 0]/Dekl_[maskRegularize == 0];
         commonTerm = np.zeros_like(Dphikl_);
         commonTerm[maskRegularize == 0] = (-1)*(1.0 + DphiDe[maskRegularize == 0])*integral[maskRegularize == 0]; 
         commonTerm[maskRegularize > 0] = 0.5*(-1)*(Dekl_ + Dphikl_)[maskRegularize > 0]*dcdeta_k[maskRegularize > 0];
         
-        djdphik[maskRegularize == 0] = commonTerm[maskRegularize == 0] + ck[maskRegularize == 0]*DphiDe[maskRegularize == 0];
-        djdphik[maskRegularize > 0] = commonTerm[maskRegularize > 0] - ck[maskRegularize > 0];
+        djdphik[maskRegularize == 0] = commonTerm[maskRegularize == 0] + ck_[maskRegularize == 0]*DphiDe[maskRegularize == 0];
+        djdphik[maskRegularize > 0] = commonTerm[maskRegularize > 0] - ck_[maskRegularize > 0];
             
         djdphil[maskRegularize == 0] = (-1)*commonTerm[maskRegularize == 0] - cl[maskRegularize == 0]*DphiDe[maskRegularize == 0];
         djdphil[maskRegularize > 0] = commonTerm[maskRegularize > 0] + cl[maskRegularize > 0];
+
+        # Derivatives w.r.t. electrostatic potential Vk and Vl
+        z = kwargs['chargeNumber'];
+        djdVk, djdVl = np.zeros_like(Dphikl_), np.zeros_like(Dphikl_);
+
+        djdVk[maskRegularize == 0] = -z*( integral[maskRegularize == 0] - ck_[maskRegularize == 0]] )*DphiDe;
+        djdVk[maskRegularize > 0] = -commonTerm[maskRegularize > 0];
+
+        djdVl[maskRegularize == 0] = z*( integral[maskRegularize == 0] - cl_[maskRegularize == 0]] )*DphiDe;
+        djdVl[maskRegularize > 0] = djdVk[maskRegularize > 0];
         
-        return j, djdphik, djdphil;
+        return j.copy(), djdphik.copy(), djdphil.copy(), djdVk.copy(), djdVl.copy();
     else:
         return j;
     #end if    
 #end def
     
+
