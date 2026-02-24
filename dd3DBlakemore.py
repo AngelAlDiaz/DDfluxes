@@ -84,13 +84,12 @@ def calcDDFlux_3DBlakemore(ek_, el_, Dphikl_, ck_, returnJacobian=False, thresho
     # (Deta)^{-1} * Integral[deta c(eta)]
     integral = fluxKernel(-ekl_ - np.log(0.27), Dekl_)/0.27;
     j = integral*Dphikl_;
-    
+
     if returnJacobian:
         dcdeta_k, cl = kwargs['dcdeta_k'], kwargs['cl'];
-
+        # Derivatives w.r.t. quasi-Fermi potential phik and phil
         djdphil, djdphik = np.zeros_like(Dphikl_), np.zeros_like(Dphikl_);
-        maskRegularize = (np.abs(Dekl_) < thresholdLinExpsn); # 1s where denominator Deta is close to 0 
-
+        
         DphiDe = np.zeros_like(Dphikl_);
         DphiDe[maskRegularize == 0] = Dphikl_[maskRegularize == 0]/Dekl_[maskRegularize == 0];
         commonTerm = np.zeros_like(Dphikl_);
@@ -102,9 +101,20 @@ def calcDDFlux_3DBlakemore(ek_, el_, Dphikl_, ck_, returnJacobian=False, thresho
             
         djdphil[maskRegularize == 0] = (-1)*commonTerm[maskRegularize == 0] - cl[maskRegularize == 0]*DphiDe[maskRegularize == 0];
         djdphil[maskRegularize > 0] = commonTerm[maskRegularize > 0] + cl[maskRegularize > 0];
+
+        # Derivatives w.r.t. electrostatic potential Vk and Vl
+        z = kwargs['chargeNumber'];
+        djdVk, djdVl = np.zeros_like(Dphikl_), np.zeros_like(Dphikl_);
+
+        djdVk[maskRegularize == 0] = -z*( integral[maskRegularize == 0] - ck_[maskRegularize == 0]] )*DphiDe;
+        djdVk[maskRegularize > 0] = -commonTerm[maskRegularize > 0];
+
+        djdVl[maskRegularize == 0] = z*( integral[maskRegularize == 0] - cl_[maskRegularize == 0]] )*DphiDe;
+        djdVl[maskRegularize > 0] = djdVk[maskRegularize > 0];
         
-        return j.copy(), djdphik.copy(), djdphil.copy();
+        return j.copy(), djdphik.copy(), djdphil.copy(), djdVk.copy(), djdVl.copy();
     else:
         return j.copy();
     #end if
+
 #end def
