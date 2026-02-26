@@ -80,7 +80,7 @@ def calcDDFlux_Gr(ek_, el_, Dphikl_, ck_, returnJacobian=False, thresholdLinExps
         djdVk, djdVl = np.zeros_like(Dphikl_), np.zeros_like(Dphikl_);
 
         djdVk[maskRegularize == 0] = -z*( integral[maskRegularize == 0] - ck_[maskRegularize == 0]] )*DphiDe;
-        djdVk[maskRegularize > 0] = -commonTerm[maskRegularize > 0];
+        djdVk[maskRegularize > 0] = z*commonTerm[maskRegularize > 0];
 
         djdVl[maskRegularize == 0] = z*( integral[maskRegularize == 0] - cl_[maskRegularize == 0]] )*DphiDe;
         djdVl[maskRegularize > 0] = djdVk[maskRegularize > 0];
@@ -91,3 +91,4 @@ def calcDDFlux_Gr(ek_, el_, Dphikl_, ck_, returnJacobian=False, thresholdLinExps
     #end if
 
 #end def
+
